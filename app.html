@@ -1,0 +1,92 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lapsemath - timelapse planning without the napkin</title>
+<style>
+:root{--ok:#1a7f37;--warn:#9a6700;--bad:#cf222e;--ink:#1f2328;--mut:#59636e;--card:#f6f8fa;--line:#d1d9e0}
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)}
+header{padding:28px 20px 8px;max-width:980px;margin:auto}
+h1{margin:0 0 4px;font-size:26px}h1 span{color:#cf222e}
+.sub{color:var(--mut);max-width:660px}
+main{max-width:980px;margin:auto;padding:12px 20px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+label{display:block;font-size:13px;color:var(--mut);margin:8px 0 2px}
+input{width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;font-size:15px}
+button{margin-top:10px;width:100%;padding:9px;font-size:15px;border:0;border-radius:8px;background:#cf222e;color:#fff;cursor:pointer}
+.big{font-size:26px;font-weight:700;margin:2px 0}
+.k{font-size:13px;color:var(--mut)}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+td,th{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left}
+.pill{display:inline-block;font-size:12px;border-radius:20px;padding:2px 10px;background:#ddf4e4;color:var(--ok);font-weight:600}
+.pill.badp{background:#ffebe9;color:var(--bad)}
+.disclaimer{font-size:12.5px;color:var(--mut);border-top:1px solid var(--line);padding-top:10px;margin-top:14px}
+.err{color:var(--bad);font-size:14px;margin-top:8px;min-height:1.2em}
+h2{font-size:17px;margin:0 0 6px}
+</style></head><body>
+<header><h1>Lapse<span>math</span></h1>
+<p class="sub">"Shoot one frame every few seconds" is how memory cards fill up at minute 40 of a 3-hour sunset. Lapsemath turns the event and the clip you want into an exact interval, frame count, card space, shutter ceiling and battery count.</p></header>
+<main><div class="grid">
+<div class="card"><h2>Interval planner</h2>
+<label>Event duration (minutes)</label><input id="p_ev" type="number" value="60">
+<label>Wanted clip length (seconds)</label><input id="p_cs" type="number" value="15">
+<label>Playback frame rate (fps)</label><input id="p_fps" type="number" value="24">
+<label>Size per frame (MB, RAW ~25-45, JPEG ~8-15)</label><input id="p_mb" type="number" value="25">
+<button id="p_go">Plan it</button><div class="err" id="p_err"></div>
+<div class="big" id="p_out">-</div><div class="k">seconds between frames</div>
+<table><tbody id="p_rows"></tbody></table></div>
+<div class="card"><h2>Shutter ceiling</h2>
+<label>Interval (seconds, from the planner)</label><input id="h_iv" type="number" value="10" step="0.1">
+<label>Your shutter time (seconds)</label><input id="h_ss" type="number" value="6" step="0.1">
+<button id="h_go">Check the shutter</button><div class="err" id="h_err"></div>
+<div class="big" id="h_out">-</div><span class="pill" id="h_pill"></span>
+<table><tbody id="h_rows"></tbody></table></div>
+<div class="card"><h2>Coverage and batteries</h2>
+<label>Shots taken (or planned frames)</label><input id="c_sh" type="number" value="360">
+<label>Interval used (seconds)</label><input id="c_iv" type="number" value="10">
+<label>Playback frame rate (fps)</label><input id="c_fps" type="number" value="24">
+<label>Shots per battery (your camera, labeled estimate)</label><input id="c_spb" type="number" value="400">
+<button id="c_go">Count it</button><div class="err" id="c_err"></div>
+<div class="big" id="c_out">-</div><span class="pill" id="c_pill"></span>
+<table><tbody id="c_rows"></tbody></table></div>
+<div class="card"><h2>Slider move</h2>
+<label>Slider travel (mm)</label><input id="s_tm" type="number" value="300">
+<label>Frames in the sequence</label><input id="s_fr" type="number" value="360">
+<label>Playback frame rate (fps)</label><input id="s_fps" type="number" value="24">
+<button id="s_go">Move it</button><div class="err" id="s_err"></div>
+<div class="big" id="s_out">-</div><div class="k">mm per shot</div>
+<table><tbody id="s_rows"></tbody></table></div>
+</div>
+<div class="disclaimer"><strong>What is exact and what is labeled.</strong> Frames, intervals, playback time, storage and slider steps are exact arithmetic from your inputs. The 1-second shutter buffer, the half-interval "natural" shutter, and anything about batteries are labeled guidance - your camera manual and the cold have the final word.</div>
+</main>
+<script src="engine.js?v=1"></script>
+<script>
+const $=id=>document.getElementById(id);
+const f1=x=>Math.round(x*10)/10, f2=x=>Math.round(x*100)/100;
+function run(errId,fn,render){ $(errId).textContent=''; try{ render(fn()); }catch(ex){ $(errId).textContent=ex.message; } }
+const pGo=()=>run('p_err',()=>Lapsemath.plan(+$('p_ev').value,+$('p_cs').value,+$('p_fps').value,+$('p_mb').value),r=>{
+  $('p_out').textContent=f2(r.interval)+'s';
+  $('p_rows').innerHTML='<tr><td>frames to shoot</td><td>'+r.frames+'</td></tr>'+
+   '<tr><td>card space</td><td>'+f2(r.storageGb)+' GB ('+r.storageMb.toLocaleString()+' MB)</td></tr>'+
+   '<tr><td>playback length</td><td>'+f1(r.playbackSec)+'s</td></tr>';
+  $('h_iv').value=f2(r.interval); $('c_sh').value=r.frames; $('c_iv').value=f2(r.interval); $('s_fr').value=r.frames; hGo(); cGo(); sGo();
+});
+const hGo=()=>run('h_err',()=>Lapsemath.shutterCheck(+$('h_iv').value,+$('h_ss').value),r=>{
+  $('h_out').textContent=f2(r.naturalShutter)+'s';
+  const p=$('h_pill'); p.textContent=r.fits?'shutter fits':'too long'; p.className='pill '+(r.fits?'':'badp');
+  $('h_rows').innerHTML='<tr><td>natural-looking shutter (half interval)</td><td>'+f2(r.naturalShutter)+'s</td></tr>'+
+   '<tr><td>verdict</td><td>'+r.verdict+'</td></tr>';
+});
+const cGo=()=>run('c_err',()=>{ const cov=Lapsemath.coverage(+$('c_sh').value,+$('c_iv').value,+$('c_fps').value); const bat=Lapsemath.batteries(+$('c_sh').value,+$('c_spb').value); return {cov,bat}; },r=>{
+  $('c_out').textContent=f1(r.cov.eventMin)+' min';
+  const p=$('c_pill'); p.textContent=r.bat.verdict; p.className='pill '+(r.bat.count<=1?'':'badp');
+  $('c_rows').innerHTML='<tr><td>event covered</td><td>'+f1(r.cov.eventMin)+' minutes</td></tr>'+
+   '<tr><td>clip length</td><td>'+f1(r.cov.clipSec)+'s</td></tr>'+
+   '<tr><td>batteries needed</td><td>'+r.bat.count+'</td></tr>';
+});
+const sGo=()=>run('s_err',()=>Lapsemath.slider(+$('s_tm').value,+$('s_fr').value,+$('s_fps').value),r=>{
+  $('s_out').textContent=f2(r.mmPerShot)+' mm';
+  $('s_rows').innerHTML='<tr><td>clip length</td><td>'+f1(r.clipSec)+'s</td></tr>'+
+   '<tr><td>apparent speed in the clip</td><td>'+f1(r.apparentMmPerClipSec)+' mm per clip-second</td></tr>';
+});
+$('p_go').onclick=pGo; $('h_go').onclick=hGo; $('c_go').onclick=cGo; $('s_go').onclick=sGo;
+pGo(); hGo(); cGo(); sGo();
+</script></body></html>
